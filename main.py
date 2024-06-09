@@ -13,6 +13,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 model = AutoModel(
     model="paraformer-zh",
     vad_model="fsmn-vad",
+    vad_kwargs={"max_single_segment_time": 60000},
     punc_model="ct-punc",
     device=device,
     # spk_model="cam++",
@@ -45,6 +46,7 @@ async def asr(file: List[UploadFile] = File(...)):
         result = model.generate(
             input=temp_input_file_path,
             batch_size_s=300,
+            batch_size_threshold_s=60,
             # hotword='魔搭'
         )
 
