@@ -27,5 +27,7 @@ docker-compose up -d
 ## 相关接口
 
 提供的接口：`POST` http://127.0.0.1:12369/asr
-
+- 支持mp3、wav音频文件转文字
 ![](example.jpg)
+- 支持mp4等视频文件转文字
+![](example2.jpg)

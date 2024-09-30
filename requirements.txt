@@ -4,5 +4,5 @@ python-multipart==0.0.*
 ffmpeg==1.4
 ffmpeg-python==0.2.0
 
-funasr==1.0.*
-modelscope==1.15.*
+funasr==1.1.*
+modelscope==1.18.*
