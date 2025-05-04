@@ -1,11 +1,11 @@
 import os
+import re
 import tempfile
 from typing import List
 
 import torch
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from funasr import AutoModel
-import json
 
 app = FastAPI()
 
@@ -32,6 +32,7 @@ def convert_audio(input_file):
     )
     return output_file
 
+
 # 异步函数，用于保存上传的文件到临时目录
 async def save_upload_file(upload_file: UploadFile) -> str:
     suffix = os.path.splitext(upload_file.filename)[1]  # 获取文件后缀名
@@ -41,28 +42,99 @@ async def save_upload_file(upload_file: UploadFile) -> str:
 
 
 def funasr_to_srt(funasr_result):
-    # 解析JSON字符串
-    # data = json.loads(funasr_result)
-    data=funasr_result
-    subtitles = data[0]['text'].split('. ')
+    data = funasr_result
+    text = data[0]['text']
     timestamps = data[0]['timestamp']
-    
-    # 初始化SRT字符串
+
+    # 配置参数
+    max_chars_per_line = 20  # 每行字幕的最大字符数
+
+    # 首先按照标点符号分割文本为短句
+    sentence_pattern = r'([^，。！？,.!?;；、]+[，。！？,.!?;；、]+)'
+    phrases = re.findall(sentence_pattern, text)
+
+    # 如果没有找到短句，就把整个文本作为一个短句
+    if not phrases:
+        phrases = [text]
+
+    # 确保所有文本都被包含
+    remaining_text = text
+    for phrase in phrases:
+        remaining_text = remaining_text.replace(phrase, '', 1)
+    if remaining_text.strip():
+        phrases.append(remaining_text.strip())
+
+    # 计算每个短句对应的时间戳
+    phrase_timestamps = []
+    total_chars = len(text)
+
+    char_index = 0
+    for phrase in phrases:
+        if not phrase.strip():
+            continue
+
+        phrase_len = len(phrase)
+        # 计算短句在整个文本中的比例
+        start_ratio = char_index / total_chars
+        end_ratio = (char_index + phrase_len) / total_chars
+
+        start_idx = min(int(start_ratio * len(timestamps)), len(timestamps) - 1)
+        end_idx = min(int(end_ratio * len(timestamps)), len(timestamps) - 1)
+
+        if start_idx == end_idx:
+            if end_idx < len(timestamps) - 1:
+                end_idx += 1
+
+        start_time = timestamps[start_idx][0]
+        end_time = timestamps[end_idx][1]
+
+        phrase_timestamps.append((phrase, start_time, end_time))
+        char_index += phrase_len
+
+    # 合并短句为合适长度的字幕段落，只考虑字数限制
+    text_segments = []
+    current_text = ""
+    current_start = None
+    current_end = None
+
+    for phrase, start, end in phrase_timestamps:
+        # 如果当前段落为空，直接添加
+        if not current_text:
+            current_text = phrase
+            current_start = start
+            current_end = end
+            continue
+
+        # 检查添加当前短句后是否会超出字数限制
+        combined_text = current_text + phrase
+
+        if len(combined_text) > max_chars_per_line:
+            # 如果会超出限制，保存当前段落并开始新段落
+            text_segments.append((current_text, current_start, current_end))
+            current_text = phrase
+            current_start = start
+            current_end = end
+        else:
+            # 否则合并短句
+            current_text = combined_text
+            current_end = end
+
+    # 添加最后一个段落
+    if current_text:
+        text_segments.append((current_text, current_start, current_end))
+
+    # 生成SRT格式，去除每段末尾的标点符号
     srt = ""
-    subtitle_index = 1
-    
-    # 遍历字幕和时间戳
-    for i in range(len(subtitles)):
-        if subtitles[i]:  # 确保字幕不为空
-            # 格式化时间戳
-            start_time = timestamps[i][0]
-            end_time = timestamps[i][1]
-            srt += f"{subtitle_index}\n"
-            srt += f"{format_timestamp(start_time)} --> {format_timestamp(end_time)}\n"
-            srt += f"{subtitles[i]}.\n\n"
-            subtitle_index += 1
-    
+    for i, (text, start, end) in enumerate(text_segments, 1):
+        # 去除段落末尾的标点符号
+        cleaned_text = re.sub(r'[，。！？,.!?;；、]+$', '', text)
+
+        srt += f"{i}\n"
+        srt += f"{format_timestamp(start)} --> {format_timestamp(end)}\n"
+        srt += f"{cleaned_text.strip()}\n\n"
+
     return srt
+
 
 def format_timestamp(milliseconds):
     # 将毫秒转换为SRT格式的时间戳
@@ -100,8 +172,8 @@ async def asr(file: List[UploadFile] = File(...)):
         )
 
         try:
-            srt=funasr_to_srt(result)
-            result[0]['srt']=srt
+            srt = funasr_to_srt(result)
+            result[0]['srt'] = srt
         except:
             print('srt convert fail')
 
