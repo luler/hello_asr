@@ -9,3 +9,4 @@ modelscope==1.18.*
 pydub==0.25.*
 onnx==1.16.*
 onnxruntime==1.19.*
+onnxconverter-common==1.14.*
