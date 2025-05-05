@@ -7,3 +7,5 @@ ffmpeg-python==0.2.0
 funasr==1.1.*
 modelscope==1.18.*
 pydub==0.25.*
+onnx==1.16.*
+onnxruntime==1.19.*
